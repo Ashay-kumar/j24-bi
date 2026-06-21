@@ -148,10 +148,11 @@
       '<button class="btn btn-primary" data-act="onb-next">Continue <i class="fa-solid fa-arrow-right"></i></button></div>';
   }
 
-  // ==================== SHELL ====================
-  function shell(view) {
-    var p = P.state.profile;
-    var nav = [
+  // ==================== WORKSPACES ====================
+  function ws() { return (P.state.identity && P.state.identity.activeWorkspace) || "parent"; }
+
+  var NAV = {
+    parent: [
       ["home", "fa-house", "Growth Journey"],
       ["development", "fa-chart-simple", "Development"],
       ["recommend", "fa-compass", "Next Adventures"],
@@ -159,23 +160,70 @@
       ["discovery", "fa-wand-magic-sparkles", "Discovery"],
       ["timeline", "fa-timeline", "Growth Timeline"],
       ["portfolio", "fa-images", "Portfolio"],
+      ["passport", "fa-id-badge", "Development Passport"],
       ["report", "fa-book-open", "Growth Story"],
       ["coach", "fa-comments", "AI Coach"],
-    ];
-    var recCount = P.recommend(4).length;
+    ],
+    child: [
+      ["child-home", "fa-house", "My Journey"],
+      ["child-adventures", "fa-mountain-sun", "My Adventures"],
+      ["child-skills", "fa-seedling", "My Skills"],
+      ["child-reflections", "fa-comment", "My Reflections"],
+      ["child-portfolio", "fa-images", "My Portfolio"],
+    ],
+    educator: [
+      ["edu-students", "fa-children", "My Students"],
+      ["passport", "fa-id-badge", "Development Passport"],
+    ],
+    orgadmin: [
+      ["org-overview", "fa-building-columns", "Overview"],
+      ["org-memberships", "fa-id-card", "Memberships"],
+      ["org-educators", "fa-chalkboard-user", "Educators"],
+    ],
+  };
+
+  function navForWorkspace(wsId) {
+    var w = P.workspaceById[wsId];
+    if (!w) return NAV.parent;
+    if (w.kind === "educator") return NAV.educator;
+    return NAV[wsId] || NAV.parent;
+  }
+  function defaultRoute(wsId) {
+    var w = P.workspaceById[wsId];
+    if (!w) return "home";
+    if (w.kind === "educator") return "edu-students";
+    if (wsId === "child") return "child-home";
+    if (wsId === "orgadmin") return "org-overview";
+    return "home";
+  }
+
+  // ==================== SHELL ====================
+  function shell(view) {
+    var p = P.state.profile;
+    var w = P.workspaceById[ws()] || P.WORKSPACES[0];
+    var nav = navForWorkspace(ws());
+    var recCount = ws() === "parent" ? P.recommend(4).length : 0;
     var navHtml = nav.map(function (n) {
       var badge = n[0] === "recommend" && recCount ? '<span class="nav-badge">' + recCount + "</span>" : "";
       return '<button class="nav-item ' + (route === n[0] ? "active" : "") + '" data-act="go" data-v="' + n[0] + '"><i class="fa-solid ' + n[1] + '"></i><span>' + n[2] + "</span>" + badge + "</button>";
     }).join("");
 
+    var idName = (P.state.identity && P.state.identity.name) || "You";
+    var switcher =
+      '<button class="ws-switch" data-act="open-workspaces" title="Switch workspace">' +
+      '<span class="ws-ic" style="background:' + tint(w.color, .15) + ";color:" + w.color + '"><i class="fa-solid ' + w.icon + '"></i></span>' +
+      '<span class="ws-meta"><span class="ws-name">' + esc(w.name) + ' workspace</span><span class="ws-sub">' + esc(idName) + " · switch</span></span>" +
+      '<i class="fa-solid fa-chevron-down ws-chev"></i></button>';
+
     return (
       '<div class="app"><aside class="sidebar">' +
       '<div class="brand"><div class="brand-star"><i class="fa-solid fa-star"></i></div><div><div class="brand-name">Polaris</div><div class="brand-sub">Development Companion</div></div></div>' +
-      '<div class="nav-section">Explore</div>' + navHtml +
+      switcher +
+      '<div class="nav-section">' + esc(w.short) + "</div>" + navHtml +
       '<div class="sidebar-foot">' +
       (!isInstalled ? '<button class="nav-item" data-act="install" style="color:var(--polaris-blue)"><i class="fa-solid fa-circle-down"></i><span>Install app</span></button>' : "") +
       '<button class="nav-item ' + (route === "profile" ? "active" : "") + '" data-act="go" data-v="profile"><i class="fa-solid fa-gear"></i><span>Profile & Settings</span></button>' +
-      '<div class="child-chip"><div class="av">' + esc(p.avatar) + '</div><div><div class="nm">' + esc(p.name) + '</div><div class="ag">Age ' + esc(p.age) + " · since " + fmtDate(p.createdAt) + "</div></div></div>" +
+      (p.name ? '<div class="child-chip"><div class="av">' + esc(p.avatar) + '</div><div><div class="nm">' + esc(p.name) + '</div><div class="ag">Age ' + esc(p.age) + " · one Passport</div></div></div>" : "") +
       "</div></aside>" +
       '<main class="main">' + (P.state.isDemo ? demoBanner() : "") + view + "</main></div>" +
       (modal ? modalView() : "")
@@ -466,34 +514,57 @@
     );
   }
 
+  function behaviourOptionsFor(compId) {
+    var c = P.competencyById[compId];
+    if (!c) return '<option value="">Other / general</option>';
+    return c.behaviors.map(function (b) { return '<option value="' + esc(b) + '">' + esc(b) + "</option>"; }).join("") +
+      '<option value="">Other / general</option>';
+  }
+
+  // Observation form follows the v2 structure (Book XVII Part VIII):
+  // Observer → Competency → Behaviour → Context → Evidence → Timestamp.
   function observationForm(mode) {
-    var comps = P.COMPETENCIES.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + " · " + esc(P.pillarById[c.pillar].name) + "</option>"; }).join("");
-    var prefix = mode === "modal" ? "m" : "i";
+    var locked = mode === "edu";
+    var wsId = ws();
+    var wcfg = P.workspaceById[wsId] || P.WORKSPACES[0];
+    var comps = locked ? P.canObserveCompetencies(wsId) : P.COMPETENCIES;
+    if (!comps.length) comps = P.COMPETENCIES;
+    var prefix = mode === "modal" ? "m" : mode === "edu" ? "e" : "i";
+    var compOptions = comps.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + " · " + esc(P.pillarById[c.pillar].name) + "</option>"; }).join("");
+    var behOptions = behaviourOptionsFor(comps[0].id);
+
     return (
-      '<div class="field"><label class="fld">What did you notice?</label><textarea id="' + prefix + '-obs-text" placeholder="e.g. Volunteered to lead the group activity"></textarea></div>' +
-      '<div class="grid g2"><div class="field"><label class="fld">Competency</label><select id="' + prefix + '-obs-comp">' + comps + "</select></div>" +
-      '<div class="field"><label class="fld">Who observed?</label><select id="' + prefix + '-obs-observer"><option value="parent">Parent</option><option value="teacher">Teacher</option><option value="coach">Coach</option><option value="child">Child (self)</option><option value="family">Family member</option></select></div></div>' +
-      '<div class="field"><label class="fld">Where?</label><select id="' + prefix + '-obs-context"><option value="home">Home</option><option value="school">School</option><option value="sports">Sports / activity</option><option value="community">Community</option><option value="outdoor">Outdoors</option></select></div>' +
-      '<button class="btn btn-primary btn-block" data-act="save-obs" data-mode="' + mode + '"><i class="fa-solid fa-check"></i> Add to journey</button>'
+      '<div class="field"><label class="fld">What did you notice? <span class="muted tiny">(a fact, not a judgement)</span></label><textarea id="' + prefix + '-obs-text" placeholder="e.g. Volunteered to lead the group activity"></textarea></div>' +
+      '<div class="grid g2"><div class="field"><label class="fld">Competency</label><select id="' + prefix + '-obs-comp" class="obs-comp-select" data-prefix="' + prefix + '">' + compOptions + "</select></div>" +
+      '<div class="field"><label class="fld">Behaviour</label><select id="' + prefix + '-obs-beh">' + behOptions + "</select></div></div>" +
+      (locked
+        ? '<div class="why-block mb16"><span class="tiny muted">Recording as <b>' + esc(P.observerLabels[wcfg.observer] || wcfg.observer) + "</b> in <b>" + esc(P.contextLabels[wcfg.context] || wcfg.context) + "</b> context.</span></div>"
+        : '<div class="grid g2"><div class="field"><label class="fld">Who observed?</label><select id="' + prefix + '-obs-observer"><option value="parent">Parent</option><option value="teacher">Teacher</option><option value="coach">Sports Coach</option><option value="music">Music / Dance Teacher</option><option value="counselor">Counselor</option><option value="child">Child (self)</option><option value="family">Family member</option></select></div>' +
+          '<div class="field"><label class="fld">Where?</label><select id="' + prefix + '-obs-context"><option value="home">Home</option><option value="school">Classroom</option><option value="sports">Sports</option><option value="creative">Creative</option><option value="community">Community</option><option value="outdoor">Outdoors</option></select></div></div>') +
+      '<label class="row tiny muted" style="gap:8px;cursor:pointer;margin-bottom:14px"><input type="checkbox" id="' + prefix + '-obs-private" style="width:auto"> Keep this note private to me (Layer 1)</label>' +
+      '<button class="btn btn-primary btn-block" data-act="save-obs" data-mode="' + mode + '"><i class="fa-solid fa-check"></i> Add to passport</button>'
     );
   }
 
   // ==================== TIMELINE ====================
   function timelineView() {
-    var events = P.timeline();
-    var colors = { observation: "#3a6ff0", reflection: "#9b6dff", portfolio: "#f0a93a", experience: "#2fa46b", "experience-start": "#5ab6e8", cgm: "#f0a93a" };
+    var viewer = (P.workspaceById[ws()] || {}).observer || "parent";
+    var events = P.timelineForViewer(viewer);
+    var colors = { observation: "#3a6ff0", reflection: "#9b6dff", portfolio: "#f0a93a", experience: "#2fa46b", "experience-start": "#5ab6e8", cgm: "#f0a93a", contribution: "#969cb0" };
+    var legend = '<div class="card card-pad mb16" style="background:var(--surface-2)"><div class="tiny muted"><i class="fa-solid fa-circle-info"></i> You see your own observations in full (Layer 1). Other contributors\u2019 raw notes stay private \u2014 they appear as shared development summaries (Layer 2), preserving independence.</div></div>';
     var body = events.length
-      ? '<div class="card card-pad"><div class="timeline">' + events.map(function (ev) {
+      ? legend + '<div class="card card-pad"><div class="timeline">' + events.map(function (ev) {
           var col = colors[ev.type] || "#3a6ff0";
+          var badge = ev.layer === 2 && ev.type === "contribution" ? ' <span class="pill" style="font-size:10px;padding:1px 7px">Layer 2</span>' : "";
           return '<div class="tl-item"><div class="tl-dot" style="background:' + col + '"><i class="fa-solid ' + ev.icon + '"></i></div>' +
-            '<div class="tl-title">' + esc(ev.title) + '</div><div class="tl-meta">' + esc(ev.meta) + " · " + esc(observerLabel(ev.observer)) + " · " + fmtDate(ev.date) + "</div></div>";
+            '<div class="tl-title">' + esc(ev.title) + badge + '</div><div class="tl-meta">' + esc(ev.meta) + " · " + esc(observerLabel(ev.observer)) + " · " + fmtDate(ev.date) + "</div></div>";
         }).join("") + "</div></div>"
       : emptyState("fa-timeline", "The story starts now", "As you observe, reflect and complete adventures, " + esc(P.state.profile.name) + "'s growth story will appear here.", "Record an observation", "open-obs");
     return pageHead("Growth Timeline", "The unfolding story of " + esc(P.state.profile.name),
       "A chronological record of observations, reflections, adventures and Child Growth Moments.") + body;
   }
   function observerLabel(o) {
-    return { parent: "Parent", teacher: "Teacher", coach: "Coach", child: "Child", family: "Family", experience: "Adventure", polaris: "Polaris" }[o] || o;
+    return P.observerLabels[o] || { parent: "Parent", teacher: "Teacher", coach: "Coach", child: "Child", family: "Family", experience: "Adventure", polaris: "Polaris" }[o] || o;
   }
 
   // ==================== PORTFOLIO ====================
@@ -609,7 +680,62 @@
     else if (modal.type === "evidence") inner = evidenceModal();
     else if (modal.type === "rec") inner = recModal(modal.id);
     else if (modal.type === "install") inner = installModal();
+    else if (modal.type === "workspaces") inner = workspacesModal();
+    else if (modal.type === "org") inner = orgModal();
+    else if (modal.type === "membership") inner = membershipModal();
+    else if (modal.type === "educator") inner = educatorModal();
     return '<div class="scrim" data-act="scrim"><div class="modal" data-stop="1">' + inner + "</div></div>";
+  }
+
+  function workspacesModal() {
+    var cur = ws();
+    var roles = (P.state.identity && P.state.identity.roles) || [];
+    return (
+      modalHead("Switch workspace", "One login \u00b7 many workspaces") +
+      '<div class="modal-body"><p class="muted tiny mb16">Your identity is permanent; roles belong to organisations. Switch perspective without signing in again.</p>' +
+      '<div class="stack">' + P.WORKSPACES.map(function (w) {
+        var yours = roles.indexOf(w.id) !== -1;
+        return '<button class="ws-card ' + (w.id === cur ? "cur" : "") + '" data-act="set-workspace" data-v="' + w.id + '">' +
+          '<span class="ws-ic" style="background:' + tint(w.color, .15) + ";color:" + w.color + '"><i class="fa-solid ' + w.icon + '"></i></span>' +
+          '<span style="flex:1"><span style="font-weight:800;display:block">' + esc(w.name) + (yours ? ' <span class="pill" style="font-size:10px;padding:1px 7px;background:var(--forest-soft);color:var(--forest)">Your role</span>' : "") + "</span>" +
+          '<span class="tiny muted">' + esc(w.tagline) + "</span></span>" +
+          (w.id === cur ? '<i class="fa-solid fa-circle-check" style="color:var(--polaris-blue)"></i>' : '<i class="fa-solid fa-chevron-right" style="color:var(--ink-3)"></i>') + "</button>";
+      }).join("") + "</div></div>"
+    );
+  }
+
+  function orgModal() {
+    var types = P.ORG_TYPES.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + "</option>"; }).join("");
+    return modalHead("Add organization", "A trusted contributor") +
+      '<div class="modal-body"><div class="field"><label class="fld">Name</label><input type="text" id="org-name" placeholder="e.g. Sunrise Public School" /></div>' +
+      '<div class="field"><label class="fld">Type</label><select id="org-type">' + types + "</select></div>" +
+      '<button class="btn btn-primary btn-block" data-act="save-org"><i class="fa-solid fa-plus"></i> Add organization</button></div>';
+  }
+
+  function membershipModal() {
+    if (!P.state.organizations.length) {
+      return modalHead("Add membership", "") + '<div class="modal-body"><div class="empty"><div class="e-ic"><i class="fa-solid fa-building"></i></div><h4>Add an organization first</h4><p>Memberships connect a child to an organization.</p><button class="btn btn-primary mt16" data-act="open-org">Add organization</button></div></div>';
+    }
+    var orgs = P.state.organizations.map(function (o) { return '<option value="' + o.id + '">' + esc(o.name) + "</option>"; }).join("");
+    var ctx = ["school", "sports", "creative", "community"].map(function (c) { return '<option value="' + c + '">' + esc(P.contextLabels[c] || c) + "</option>"; }).join("");
+    return modalHead("Add membership", "Child \u2194 organization") +
+      '<div class="modal-body"><div class="field"><label class="fld">Organization</label><select id="mem-org">' + orgs + "</select></div>" +
+      '<div class="grid g2"><div class="field"><label class="fld">Context</label><select id="mem-context">' + ctx + "</select></div>" +
+      '<div class="field"><label class="fld">Start year</label><input type="number" id="mem-year" value="' + new Date().getFullYear() + '" /></div></div>' +
+      '<button class="btn btn-primary btn-block" data-act="save-membership"><i class="fa-solid fa-plus"></i> Add membership</button></div>';
+  }
+
+  function educatorModal() {
+    if (!P.state.organizations.length) {
+      return modalHead("Add educator", "") + '<div class="modal-body"><div class="empty"><div class="e-ic"><i class="fa-solid fa-building"></i></div><h4>Add an organization first</h4><button class="btn btn-primary mt16" data-act="open-org">Add organization</button></div></div>';
+    }
+    var orgs = P.state.organizations.map(function (o) { return '<option value="' + o.id + '">' + esc(o.name) + "</option>"; }).join("");
+    return modalHead("Add educator", "Assigned to classes, never to children") +
+      '<div class="modal-body"><div class="field"><label class="fld">Organization</label><select id="edu-org">' + orgs + "</select></div>" +
+      '<div class="field"><label class="fld">Name</label><input type="text" id="edu-name" placeholder="e.g. Ms. Khan" /></div>' +
+      '<div class="grid g2"><div class="field"><label class="fld">Role</label><input type="text" id="edu-role" placeholder="e.g. Class Teacher" /></div>' +
+      '<div class="field"><label class="fld">Assignment</label><input type="text" id="edu-assign" placeholder="e.g. Grade 5 · Section B" /></div></div>' +
+      '<button class="btn btn-primary btn-block" data-act="save-educator"><i class="fa-solid fa-plus"></i> Add educator</button></div>';
   }
   function modalHead(title, sub) {
     return '<div class="modal-head"><div><div class="page-eyebrow">' + esc(sub || "Polaris") + '</div><div style="font-size:21px;font-weight:800;letter-spacing:-.4px">' + esc(title) + '</div></div><button class="x-btn" data-act="close"><i class="fa-solid fa-xmark"></i></button></div>';
@@ -745,6 +871,233 @@
     return '<div class="empty" style="padding:24px 12px"><div class="e-ic" style="font-size:24px"><i class="fa-solid ' + ic + '"></i></div><div style="font-weight:700">' + esc(h) + '</div><div class="tiny">' + esc(p) + "</div></div>";
   }
 
+  // ==================== DEVELOPMENT PASSPORT ====================
+  function developmentSummaryCard() {
+    var ds = P.developmentSummary();
+    return (
+      '<div class="card card-pad"><div class="section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Development Summary <span class="pill" style="margin-left:auto">Layer 2 · shared</span></div>' +
+      '<div style="font-weight:800;font-size:16px;margin-bottom:8px">' + esc(ds.headline) + "</div>" +
+      ds.paragraphs.map(function (p) { return '<p style="font-size:14px;margin-bottom:8px">' + esc(p) + "</p>"; }).join("") +
+      (ds.crossContext.length
+        ? '<div class="mt12"><div class="fld">Strengths seen across settings</div>' + ds.crossContext.map(function (cc) {
+            var c = pillarColor(cc.competency.pillar);
+            return '<div style="font-size:13.5px;padding:3px 0"><i class="fa-solid fa-circle-nodes" style="color:' + c + '"></i> <b>' + esc(cc.competency.name) + "</b> — " + esc(cc.contexts.join(" & ")) + "</div>";
+          }).join("") + "</div>"
+        : "") + "</div>"
+    );
+  }
+
+  function perspectivesCard() {
+    var counts = {};
+    P.state.observations.forEach(function (o) { if (o.observer !== "experience") counts[o.observer] = (counts[o.observer] || 0) + 1; });
+    var rows = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+    return (
+      '<div class="card card-pad"><div class="section-title"><i class="fa-solid fa-users-viewfinder"></i> Contributors</div>' +
+      '<p class="tiny muted mb16">Independent perspectives combined into one understanding.</p>' +
+      (rows.length ? rows.map(function (o) {
+        return '<div class="spread" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="row"><span class="comp-ic" style="width:30px;height:30px;margin:0;background:var(--polaris-blue-soft);color:var(--polaris-blue)"><i class="fa-solid fa-user"></i></span><span style="font-weight:700;font-size:13.5px">' + esc(P.observerLabels[o] || o) + "</span></div><span class=\"pill\">" + counts[o] + " observation" + (counts[o] === 1 ? "" : "s") + "</span></div>";
+      }).join("") : emptyMini("fa-users", "No contributors yet", "Invite teachers and coaches to contribute.")) + "</div>"
+    );
+  }
+
+  function membershipsCard(showManage) {
+    var mems = P.state.memberships;
+    return (
+      '<div class="card card-pad"><div class="section-title"><i class="fa-solid fa-id-card"></i> Development Memberships' +
+      (showManage ? '<span class="more" data-act="open-membership">+ Add</span>' : "") + "</div>" +
+      '<p class="tiny muted mb16">Organisations are contributors, not owners. When a membership ends, their access ends \u2014 but contributed observations remain.</p>' +
+      (mems.length ? mems.map(function (m) {
+        var org = P.state.organizations.find(function (o) { return o.id === m.orgId; }) || { name: "Organization", type: "school" };
+        var t = P.orgTypeById[org.type] || { icon: "fa-building" };
+        var c = (P.workspaceById[m.context === "school" ? "teacher" : m.context === "sports" ? "coach" : m.context === "creative" ? "music" : "parent"] || {}).color || "#3a6ff0";
+        return '<div class="spread" style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="row"><span class="comp-ic" style="width:32px;height:32px;margin:0;background:' + tint(c, .12) + ";color:" + c + '"><i class="fa-solid ' + t.icon + '"></i></span>' +
+          '<div><div style="font-weight:700;font-size:13.5px">' + esc(org.name) + '</div><div class="tiny muted">' + esc(P.contextLabels[m.context] || m.context) + " · " + esc(m.startYear) + (m.status === "ended" ? "\u2013" + esc(m.endYear || "") : "\u2013Present") + "</div></div></div>" +
+          (m.status === "active" ? '<span class="pill" style="background:var(--forest-soft);color:var(--forest)">Active</span>' : '<span class="pill">Ended</span>') + "</div>";
+      }).join("") : emptyMini("fa-id-card", "No memberships", "Add a school or academy in the Org Admin workspace.")) + "</div>"
+    );
+  }
+
+  function passportView() {
+    var p = P.state.profile;
+    var pillars = P.pillarStates();
+    var states = P.allCompetencyStates();
+    var totalEvidence = P.state.observations.length + P.state.reflections.length + P.state.evidence.length;
+    var completed = P.state.experiences.filter(function (x) { return x.status === "completed"; }).length;
+
+    return (
+      pageHead("Development Passport", "One child \u00b7 one permanent record",
+        "The single source of truth. Organisations contribute; no one owns it. It persists for life, across every school and academy.") +
+      '<div class="card card-pad" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">' +
+      '<div style="width:62px;height:62px;border-radius:16px;background:var(--gold-soft);display:grid;place-items:center;font-size:32px">' + esc(p.avatar) + "</div>" +
+      '<div style="flex:1;min-width:160px"><div style="font-weight:800;font-size:22px">' + esc(p.name) + '</div><div class="muted">Age ' + esc(p.age) + " \u00b7 Passport since " + fmtDate(p.createdAt) + "</div></div>" +
+      '<div class="row" style="gap:26px">' +
+      reportStat(totalEvidence, "Evidence") + reportStat(completed, "Adventures") + reportStat(P.state.cgms.length, "Growth Moments") + reportStat(P.state.memberships.filter(function (m) { return m.status === "active"; }).length, "Memberships") +
+      "</div>" +
+      '<button class="btn btn-ghost" data-act="export"><i class="fa-solid fa-download"></i> Export</button></div>' +
+      '<div class="grid g2 mt24">' + developmentSummaryCard() + perspectivesCard() + "</div>" +
+      '<div class="grid g2 mt24">' +
+      '<div class="card card-pad"><div class="section-title"><i class="fa-solid fa-star"></i> Development Constellation</div><div class="radar-wrap">' + radarSVG(pillars, 340) + "</div></div>" +
+      membershipsCard(false) + "</div>" +
+      '<div class="section-title mt24"><i class="fa-solid fa-seedling"></i> Competencies</div>' +
+      '<div class="grid g4">' + states.map(compCard).join("") + "</div>"
+    );
+  }
+
+  // ==================== CHILD WORKSPACE ====================
+  function childStage(stage) { return ["Growing", "Growing", "Blooming", "Thriving", "Mastering"][stage.order] || "Growing"; }
+
+  function childHomeView() {
+    var p = P.state.profile;
+    var recs = P.recommend(1);
+    var rec = recs[0];
+    var skills = P.allCompetencyStates().filter(function (s) { return s.evidenceCount > 0; }).sort(function (a, b) { return b.confidence - a.confidence; }).slice(0, 4);
+    var hero = rec
+      ? '<div class="hero"><div class="hero-eyebrow"><i class="fa-solid fa-wand-magic-sparkles"></i> Today\u2019s Adventure</div><h2>' + esc(rec.experience.title) + "</h2><p>" + esc(rec.experience.why) + "</p>" +
+        '<div class="row mt16"><button class="btn btn-primary" data-act="start-exp" data-v="' + rec.experience.id + '"><i class="fa-solid fa-play"></i> Let\u2019s go!</button>' +
+        '<button class="btn btn-ghost" data-act="go" data-v="child-adventures">More adventures</button></div></div>'
+      : '<div class="hero"><h2>Ready for an adventure?</h2><div class="row mt16"><button class="btn btn-primary" data-act="go" data-v="child-adventures">Explore</button></div></div>';
+    return (
+      pageHead("Hi " + esc(p.name) + "! \ud83d\udc4b", "What exciting thing can you do today?", "") +
+      hero +
+      '<div class="section-title mt24"><i class="fa-solid fa-seedling"></i> How you\u2019re growing</div>' +
+      '<div class="grid g4">' + (skills.length ? skills.map(function (s) {
+        var c = s.pillar.color;
+        return '<div class="comp-card" data-act="go" data-v="child-skills"><div class="comp-ic" style="background:' + tint(c, .12) + ";color:" + c + '"><i class="fa-solid ' + s.competency.icon + '"></i></div><div class="comp-name">' + esc(s.competency.name) + '</div><div class="stage stage-' + s.stage.order + ' mt8">' + esc(childStage(s.stage)) + "</div></div>";
+      }).join("") : emptyMini("fa-seedling", "Start exploring", "Your skills grow as you do adventures!")) + "</div>"
+    );
+  }
+
+  function childAdventuresView() {
+    var age = P.state.profile.age;
+    var list = P.EXPERIENCES.filter(function (e) { return age >= e.ageMin && age <= e.ageMax; }).slice(0, 9);
+    return (
+      pageHead("My Adventures", "Pick something fun to explore", "") +
+      '<div class="grid g3">' + list.map(function (e) {
+        var c = pillarColor(P.competencyById[e.targets[0]].pillar);
+        return '<div class="exp-card"><div class="exp-top"><div class="exp-ic" style="background:' + tint(c, .12) + ";color:" + c + '"><i class="fa-solid ' + e.icon + '"></i></div><div><div class="exp-title">' + esc(e.title) + '</div></div></div><div class="exp-body"><div class="exp-why">' + esc(e.why) + '</div><div class="exp-actions"><button class="btn btn-primary btn-sm btn-block" data-act="start-exp" data-v="' + e.id + '"><i class="fa-solid fa-play"></i> Start</button></div></div></div>';
+      }).join("") + "</div>"
+    );
+  }
+
+  function childSkillsView() {
+    var states = P.allCompetencyStates();
+    return (
+      pageHead("My Skills", "Look how you\u2019re growing!", "You\u2019re never compared with anyone \u2014 only with yourself yesterday.") +
+      '<div class="grid g4">' + states.map(function (s) {
+        var c = s.pillar.color;
+        var pct = Math.round(s.confidence * 100);
+        return '<div class="comp-card"><div class="comp-ic" style="background:' + tint(c, .12) + ";color:" + c + '"><i class="fa-solid ' + s.competency.icon + '"></i></div><div class="comp-name">' + esc(s.competency.name) + '</div><div class="grow-bar"><i style="width:' + pct + '%"></i></div><div class="comp-foot"><span class="stage stage-' + s.stage.order + '">' + esc(childStage(s.stage)) + "</span></div></div>";
+      }).join("") + "</div>"
+    );
+  }
+
+  function childReflectionsView() {
+    var refl = P.state.reflections.slice(0, 12);
+    var prompts = ["What made you smile today?", "What was tricky?", "What are you proud of?", "What surprised you?"];
+    return (
+      pageHead("My Reflections", "Think about your day", "") +
+      '<div class="card card-pad mb24"><div class="section-title"><i class="fa-solid fa-pen-nib"></i> Add a reflection</div>' +
+      '<div class="field"><label class="fld">' + esc(prompts[Math.floor(Math.random() * prompts.length)]) + '</label><textarea id="child-refl" placeholder="In your own words\u2026"></textarea></div>' +
+      '<button class="btn btn-primary btn-block" data-act="save-child-reflection"><i class="fa-solid fa-star"></i> Save</button></div>' +
+      (refl.length ? refl.map(function (r) {
+        return '<div class="card card-pad mb16"><div style="font-size:14.5px">\u201c' + esc(r.text) + "\u201d</div><div class=\"tiny muted mt8\">" + fmtDate(r.date) + "</div></div>";
+      }).join("") : emptyMini("fa-comment", "No reflections yet", "Add your first one above!"))
+    );
+  }
+
+  // ==================== EDUCATOR WORKSPACE ====================
+  function eduStudents() {
+    var w = P.workspaceById[ws()];
+    if (!w) return [];
+    // Students this educator can access = children with a membership in their context.
+    var mems = P.state.memberships.filter(function (m) {
+      return m.status === "active" && (w.id === "counselor" || m.context === w.context);
+    });
+    if (!mems.length) return [];
+    // Single-child prototype: the one passport.
+    return [{ profile: P.state.profile, membership: mems[0] }];
+  }
+
+  function eduStudentsView() {
+    var w = P.workspaceById[ws()];
+    var students = eduStudents();
+    return (
+      pageHead("My Students", w.tagline,
+        "You contribute high-quality observations. Polaris turns them into understanding \u2014 you never assign labels.") +
+      (students.length
+        ? '<div class="grid g3">' + students.map(function (st) {
+            var org = P.state.organizations.find(function (o) { return o.id === st.membership.orgId; }) || {};
+            return '<div class="comp-card" data-act="edu-open-student"><div class="row mb8"><div style="width:44px;height:44px;border-radius:12px;background:var(--gold-soft);display:grid;place-items:center;font-size:22px">' + esc(st.profile.avatar) + '</div><div><div class="comp-name">' + esc(st.profile.name) + '</div><div class="tiny muted">Age ' + esc(st.profile.age) + " \u00b7 " + esc(org.name || "") + "</div></div></div>" +
+              '<button class="btn btn-soft btn-sm btn-block mt8"><i class="fa-solid fa-eye"></i> Open & observe</button></div>';
+          }).join("") + "</div>"
+        : emptyState("fa-children", "No students assigned", "You'll see students once your organisation assigns you to their class or batch and a membership exists for your context.", null, null))
+    );
+  }
+
+  function eduStudentView() {
+    var w = P.workspaceById[ws()];
+    var p = P.state.profile;
+    var myObs = P.state.observations.filter(function (o) { return o.observer === w.observer; });
+    var canComps = P.canObserveCompetencies(ws());
+    return (
+      '<div class="page-head"><div class="page-eyebrow"><span data-act="go" data-v="edu-students" style="cursor:pointer">\u2039 My Students</span></div><div class="page-title">' + esc(p.name) + '</div><div class="page-sub">Recording as ' + esc(w.name) + " \u00b7 " + esc(P.contextLabels[w.context]) + " context</div></div>" +
+      '<div class="grid g2">' +
+      '<div class="card card-pad"><div class="section-title"><i class="fa-solid fa-eye"></i> Record an observation</div>' +
+      '<p class="tiny muted mb16">Record only what you saw \u2014 a fact, not a judgement.</p>' + observationForm("edu") + "</div>" +
+      developmentSummaryCard() + "</div>" +
+      '<div class="grid g2 mt24">' +
+      '<div class="card card-pad"><div class="section-title"><i class="fa-solid fa-list"></i> My observations <span class="pill" style="margin-left:auto">Layer 1 · private to you</span></div>' +
+      (myObs.length ? myObs.slice(0, 8).map(function (o) {
+        return '<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div style="font-size:13.5px">' + esc(o.text) + '</div><div class="tiny muted mt8">' + esc(o.competency ? P.competencyById[o.competency].name : "") + " \u00b7 " + fmtDate(o.date) + "</div></div>";
+      }).join("") : emptyMini("fa-eye", "No observations yet", "Record your first one.")) + "</div>" +
+      '<div class="card card-pad"><div class="section-title"><i class="fa-solid fa-chart-simple"></i> Competency progress</div>' +
+      '<p class="tiny muted mb16">What you can observe in this context (combined, Layer 2). Other observers\u2019 raw notes stay private.</p>' +
+      canComps.map(function (c) {
+        var st = P.competencyState(c.id); var col = pillarColor(c.pillar); var pct = Math.round(st.confidence * 100);
+        return '<div class="spread" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="row"><span class="comp-ic" style="width:28px;height:28px;margin:0;background:' + tint(col, .12) + ";color:" + col + '"><i class="fa-solid ' + c.icon + '"></i></span><span style="font-weight:700;font-size:13px">' + esc(c.name) + '</span></div><div class="row" style="width:90px"><div class="grow-bar" style="flex:1"><i style="width:' + pct + '%;background:' + col + '"></i></div></div></div>';
+      }).join("") + "</div></div>"
+    );
+  }
+
+  // ==================== ORG ADMIN WORKSPACE ====================
+  function orgOverviewView() {
+    var orgs = P.state.organizations;
+    return (
+      pageHead("Organization", "Manage your contributions",
+        "Organisations manage operations \u2014 educators, classes, memberships. Polaris manages the platform. You never own a child\u2019s passport.") +
+      '<div class="spread mb16"><div></div><button class="btn btn-primary" data-act="open-org"><i class="fa-solid fa-plus"></i> Add organization</button></div>' +
+      (orgs.length ? '<div class="grid g3">' + orgs.map(function (o) {
+        var t = P.orgTypeById[o.type] || { icon: "fa-building", name: o.type };
+        var mems = P.state.memberships.filter(function (m) { return m.orgId === o.id && m.status === "active"; }).length;
+        return '<div class="comp-card"><div class="comp-ic" style="background:var(--polaris-blue-soft);color:var(--polaris-blue)"><i class="fa-solid ' + t.icon + '"></i></div><div class="comp-name">' + esc(o.name) + '</div><div class="comp-pillar">' + esc(t.name) + '</div><div class="comp-foot"><span class="tiny muted">' + (o.educators ? o.educators.length : 0) + ' educators</span><span class="tiny muted">' + mems + " students</span></div></div>";
+      }).join("") + "</div>" : emptyState("fa-building-columns", "No organizations yet", "Add a school, academy or club to start contributing.", "Add organization", "open-org"))
+    );
+  }
+
+  function orgMembershipsView() {
+    return pageHead("Memberships", "Child \u2194 organization relationships",
+      "Each membership grants context-based access. End a membership and access ends \u2014 but observations remain in the passport.") +
+      '<div class="spread mb16"><div></div><button class="btn btn-primary" data-act="open-membership"><i class="fa-solid fa-plus"></i> Add membership</button></div>' +
+      '<div class="card card-pad">' + (P.state.memberships.length ? P.state.memberships.map(function (m) {
+        var org = P.state.organizations.find(function (o) { return o.id === m.orgId; }) || { name: "Organization" };
+        return '<div class="spread" style="padding:12px 0;border-bottom:1px solid var(--line)"><div><div style="font-weight:700">' + esc(org.name) + '</div><div class="tiny muted">' + esc(P.contextLabels[m.context] || m.context) + " \u00b7 " + esc(m.startYear) + (m.status === "ended" ? "\u2013" + esc(m.endYear || "") : "\u2013Present") + " \u00b7 " + esc(m.childName || P.state.profile.name) + "</div></div>" +
+          (m.status === "active" ? '<button class="btn btn-ghost btn-sm" data-act="end-membership" data-v="' + m.id + '">End</button>' : '<span class="pill">Ended</span>') + "</div>";
+      }).join("") : emptyMini("fa-id-card", "No memberships", "Add one above.")) + "</div>";
+  }
+
+  function orgEducatorsView() {
+    var orgs = P.state.organizations;
+    return pageHead("Educators", "Who contributes from each organization",
+      "Educators are assigned to classes or batches \u2014 never directly to children. Access is inherited from assignments.") +
+      '<div class="spread mb16"><div></div><button class="btn btn-primary" data-act="open-educator"><i class="fa-solid fa-plus"></i> Add educator</button></div>' +
+      (orgs.length ? orgs.map(function (o) {
+        return '<div class="card card-pad mb16"><div class="section-title"><i class="fa-solid fa-building"></i> ' + esc(o.name) + "</div>" +
+          ((o.educators && o.educators.length) ? o.educators.map(function (e) {
+            return '<div class="spread" style="padding:9px 0;border-bottom:1px solid var(--line)"><div class="row"><span class="comp-ic" style="width:30px;height:30px;margin:0;background:var(--teal-bg,var(--polaris-blue-soft));color:var(--teal,#20c8c0)"><i class="fa-solid fa-chalkboard-user"></i></span><div><div style="font-weight:700;font-size:13.5px">' + esc(e.name) + '</div><div class="tiny muted">' + esc(e.role || "") + (e.assignment ? " \u00b7 " + esc(e.assignment) : "") + "</div></div></div></div>";
+          }).join("") : emptyMini("fa-chalkboard-user", "No educators", "Add one above.")) + "</div>";
+      }).join("") : emptyMini("fa-building", "No organizations", "Add an organization first."));
+  }
+
   // ==================== RENDER ====================
   function viewFor() {
     switch (route) {
@@ -755,9 +1108,23 @@
       case "discovery": return discoveryView();
       case "timeline": return timelineView();
       case "portfolio": return portfolioView();
+      case "passport": return passportView();
       case "report": return reportView();
       case "coach": return coachView();
       case "profile": return profileView();
+      // child workspace
+      case "child-home": return childHomeView();
+      case "child-adventures": return childAdventuresView();
+      case "child-skills": return childSkillsView();
+      case "child-reflections": return childReflectionsView();
+      case "child-portfolio": return portfolioView();
+      // educator workspace
+      case "edu-students": return eduStudentsView();
+      case "edu-student": return eduStudentView();
+      // org admin workspace
+      case "org-overview": return orgOverviewView();
+      case "org-memberships": return orgMembershipsView();
+      case "org-educators": return orgEducatorsView();
       default: return homeView();
     }
   }
@@ -822,6 +1189,23 @@
       // leave the sample and onboard a real child
       case "start-own": P.reset(); onb = { step: 0, draft: null }; route = "home"; render(); break;
 
+      // workspaces (Book XVII)
+      case "open-workspaces": openModal("workspaces"); break;
+      case "set-workspace": P.setWorkspace(v); route = defaultRoute(v); modal = null; window.scrollTo(0, 0); render(); break;
+
+      // educator workspace
+      case "edu-open-student": go("edu-student"); break;
+      case "save-child-reflection": saveChildReflection(); break;
+
+      // org admin
+      case "open-org": openModal("org"); break;
+      case "save-org": saveOrg(); break;
+      case "open-membership": openModal("membership"); break;
+      case "save-membership": saveMembership(); break;
+      case "end-membership": P.endMembership(v); render(); toast("Membership ended — observations remain in the passport."); break;
+      case "open-educator": openModal("educator"); break;
+      case "save-educator": saveEducator(); break;
+
       // install
       case "install": doInstall(); break;
 
@@ -871,18 +1255,62 @@
   }
 
   function saveObs(mode) {
-    var prefix = mode === "modal" ? "m" : "i";
+    var prefix = mode === "modal" ? "m" : mode === "edu" ? "e" : "i";
     var text = val(prefix + "-obs-text").trim();
     if (!text) { toast("Please describe what you noticed"); return; }
+    var locked = mode === "edu";
+    var wcfg = P.workspaceById[ws()] || P.WORKSPACES[0];
+    var observer = locked ? wcfg.observer : (val(prefix + "-obs-observer") || "parent");
+    var context = locked ? wcfg.context : (val(prefix + "-obs-context") || "home");
+    var orgId = null;
+    if (locked) {
+      var mem = P.state.memberships.find(function (m) { return m.status === "active" && (wcfg.id === "counselor" || m.context === wcfg.context); });
+      if (mem) orgId = mem.orgId;
+    }
+    var privEl = document.getElementById(prefix + "-obs-private");
     P.addObservation({
-      observer: val(prefix + "-obs-observer") || "parent",
-      context: val(prefix + "-obs-context") || "home",
+      observer: observer,
+      context: context,
       competency: val(prefix + "-obs-comp"),
+      behaviour: val(prefix + "-obs-beh"),
       text: text,
       evidenceType: "observation",
+      orgId: orgId,
+      private: privEl ? privEl.checked : false,
     });
     if (mode === "modal") closeModal(); else render();
-    toast("Observation added to the journey 🌱");
+    toast("Observation added to the passport 🌱");
+  }
+
+  function saveChildReflection() {
+    var text = val("child-refl").trim();
+    if (!text) { toast("Write a little something first"); return; }
+    P.addReflection({ by: "child", text: text });
+    render();
+    toast("Reflection saved 🌟");
+  }
+
+  function saveOrg() {
+    var name = val("org-name").trim();
+    if (!name) { toast("Please name the organization"); return; }
+    P.addOrganization({ name: name, type: val("org-type") || "school" });
+    closeModal(); toast("Organization added");
+  }
+
+  function saveMembership() {
+    var orgId = val("mem-org");
+    if (!orgId) { toast("Choose an organization"); return; }
+    var yr = parseInt(val("mem-year"), 10);
+    P.addMembership({ orgId: orgId, childName: P.state.profile.name, context: val("mem-context") || "school", startYear: isNaN(yr) ? new Date().getFullYear() : yr });
+    closeModal(); toast("Membership added");
+  }
+
+  function saveEducator() {
+    var orgId = val("edu-org");
+    var name = val("edu-name").trim();
+    if (!orgId || !name) { toast("Add an organization and a name"); return; }
+    P.addEducator(orgId, { name: name, role: val("edu-role").trim(), assignment: val("edu-assign").trim() });
+    closeModal(); toast("Educator added");
   }
 
   function saveEvidence() {
@@ -970,6 +1398,15 @@
       coachAsk(document.activeElement.value);
     }
   }
+  // Repopulate the Behaviour dropdown when the Competency changes (no full re-render).
+  function onChange(e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains("obs-comp-select")) {
+      var prefix = t.getAttribute("data-prefix");
+      var beh = document.getElementById(prefix + "-obs-beh");
+      if (beh) beh.innerHTML = behaviourOptionsFor(t.value);
+    }
+  }
 
   // ==================== INIT ====================
   function isStandalone() {
@@ -1005,6 +1442,7 @@
 
     document.addEventListener("click", onClick);
     document.addEventListener("keydown", onKey);
+    document.addEventListener("change", onChange);
     render();
   }
 

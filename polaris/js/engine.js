@@ -370,6 +370,106 @@
   };
 
   /*
+   * Viewer-aware timeline (Book XVII Part IX — visibility layers).
+   * A viewer sees their OWN raw observations (Layer 1). Other observers' raw
+   * notes are surfaced only as Layer-2 development summaries (no raw text),
+   * preserving independence and reducing bias.
+   */
+  P.timelineForViewer = function (viewerObserver) {
+    var s = P.state;
+    var events = [];
+    s.observations.forEach(function (o) {
+      var raw = !P.canSeeRaw || P.canSeeRaw(viewerObserver, o.observer);
+      var compName = o.competency ? P.competencyById[o.competency].name : "a competency";
+      if (raw) {
+        events.push({ date: o.date, type: "observation", icon: "fa-eye", title: o.text || "Observation",
+          meta: compName, observer: o.observer, layer: 1 });
+      } else {
+        // Layer-2: show that a contribution happened, not the private text.
+        events.push({ date: o.date, type: "contribution", icon: "fa-circle-nodes",
+          title: (P.observerLabels[o.observer] || o.observer) + " contributed an observation",
+          meta: "Strengthened " + compName + " · summary only", observer: o.observer, layer: 2 });
+      }
+    });
+    s.reflections.forEach(function (r) {
+      events.push({ date: r.date, type: "reflection", icon: "fa-comment", title: r.text || "Reflection", meta: "Reflection", observer: r.by, layer: 1 });
+    });
+    s.evidence.forEach(function (e) {
+      events.push({ date: e.date, type: "portfolio", icon: "fa-image", title: e.title || "Memory", meta: e.note || "Portfolio", observer: "parent", layer: 3 });
+    });
+    s.experiences.forEach(function (x) {
+      var exp = P.experienceById[x.experienceId];
+      if (!exp) return;
+      if (x.status === "completed") {
+        events.push({ date: x.completedAt, type: "experience", icon: "fa-flag-checkered", title: "Completed: " + exp.title,
+          meta: exp.targets.map(function (c) { return P.competencyById[c].name; }).slice(0, 2).join(", "), observer: "experience", layer: 2 });
+      } else if (x.status === "active") {
+        events.push({ date: x.startedAt, type: "experience-start", icon: "fa-play", title: "Started: " + exp.title, meta: "Adventure in progress", observer: "experience", layer: 2 });
+      }
+    });
+    s.cgms.forEach(function (c) {
+      events.push({ date: c.date, type: "cgm", icon: "fa-star", title: c.text, meta: "Child Growth Moment", observer: "polaris", layer: 2 });
+    });
+    events.sort(function (a, b) { return b.date - a.date; });
+    return events;
+  };
+
+  /*
+   * AI Development Summary (Book XVII — Layer 2 / Development Passport).
+   * Combines all perspectives into one explainable, cross-context summary.
+   */
+  P.developmentSummary = function () {
+    var states = P.allCompetencyStates().filter(function (s) { return s.evidenceCount > 0; });
+    var name = P.state.profile.name || "This child";
+
+    // Distinct perspectives that have contributed.
+    var observers = {};
+    P.state.observations.forEach(function (o) { observers[o.observer] = (observers[o.observer] || 0) + 1; });
+    var perspectiveCount = Object.keys(observers).filter(function (k) { return k !== "experience"; }).length;
+
+    // Cross-context strengths: competencies seen in 2+ distinct environments.
+    var crossContext = states.filter(function (s) {
+      var ctx = s.contexts.filter(function (c) { return c !== "experience" && c !== "reflection"; });
+      return ctx.length >= 2;
+    }).sort(function (a, b) { return b.confidence - a.confidence; }).slice(0, 4).map(function (s) {
+      var ctx = s.contexts.filter(function (c) { return c !== "experience" && c !== "reflection"; })
+        .map(function (c) { return (P.contextLabels[c] || c).toLowerCase(); });
+      return { competency: s.competency, contexts: ctx, stage: s.stage };
+    });
+
+    var top = states.slice().sort(function (a, b) { return b.confidence - a.confidence; }).slice(0, 3);
+    var headline = top.length
+      ? name + " is showing strong " + top.map(function (s) { return s.competency.name.toLowerCase(); }).join(", ") + "."
+      : "We're just beginning to understand " + name + ".";
+
+    var paragraphs = [];
+    if (states.length) {
+      paragraphs.push(
+        "Drawing on " + P.state.observations.length + " observation" + (P.state.observations.length === 1 ? "" : "s") +
+        " from " + perspectiveCount + " perspective" + (perspectiveCount === 1 ? "" : "s") +
+        ", a consistent picture is emerging. The strongest signals are in " +
+        top.map(function (s) { return s.competency.name }).join(", ") + "."
+      );
+      if (crossContext.length) {
+        paragraphs.push(
+          crossContext[0].competency.name + " stands out because it appears across " +
+          crossContext[0].contexts.join(" and ") + " — strengths seen in multiple settings are the most reliable."
+        );
+      }
+    } else {
+      paragraphs.push("As trusted adults contribute observations, Polaris will combine them into one shared understanding here.");
+    }
+
+    return {
+      headline: headline,
+      paragraphs: paragraphs,
+      crossContext: crossContext,
+      perspectiveCount: perspectiveCount,
+      observerCounts: observers,
+    };
+  };
+
+  /*
    * Growth Story report (Book 8 Ch.18) — encouraging, evidence-based narrative.
    */
   P.buildReport = function () {

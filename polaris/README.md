@@ -29,6 +29,7 @@ profile (meet *Aanya*, age 9) and see the whole platform populated immediately.
 
 | Polaris concept | Where it lives |
 | --- | --- |
+| **Platform Architecture & Governance** — Identity, Workspaces, Organizations, Memberships, Development Passport, visibility layers (Book XVII) | `js/platform.js` + `js/app.js` |
 | **Development Standard** — 10 Pillars → Competencies → Behaviors → Growth Stages (Books 4 & 6) | `js/framework.js` |
 | **Experience Library + Discovery** — purpose-built experiences with evidence & reflection prompts (Books 5 & 9) | `js/experiences.js` |
 | **Knowledge Graph + Confidence Model** — evidence-driven competency states, never numeric to the user (Books 3 & 7) | `js/engine.js` |
@@ -56,6 +57,24 @@ Observe → Understand → Recommend → Experience → Reflect → Grow → (re
   reflection and evidence. Each completion feeds new evidence back into the graph.
 - **Grow** — every new piece of evidence can create a **Child Growth Moment**,
   the platform's true success metric.
+
+## Platform: one app, many workspaces (Book XVII)
+
+Polaris is now a multi-workspace platform built on the principle:
+
+> **One Child. One Identity. One Development Passport. Many Contributors.**
+
+- **Workspace switcher** (top of the sidebar) — switch between **Parent, Child,
+  Teacher, Sports Coach, Music/Dance, Counselor, and Org Admin** with one login.
+- **Development Passport** — the single, permanent source of truth for a child:
+  AI Development Summary, contributors, constellation, memberships, competencies.
+- **Independent observers + visibility layers** — each contributor records facts
+  in their own context; you see your own raw notes (Layer 1), while others'
+  contributions appear as shared AI summaries (Layer 2), reducing bias.
+- **Organizations & Memberships** — schools/academies are *contributors, not
+  owners*; ending a membership ends access but keeps contributed observations.
+- **Observation v2 structure** — Observer → Competency → Behaviour → Context →
+  Evidence → Timestamp, with an optional "private to me" flag.
 
 ## Key screens
 

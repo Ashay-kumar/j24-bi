@@ -9,7 +9,7 @@
  *  - Navigations fall back to the cached index when offline.
  *  - Cross-origin assets (fonts, icons CDN) use stale-while-revalidate.
  */
-const CACHE = "polaris-v1";
+const CACHE = "polaris-v2";
 
 const APP_SHELL = [
   "./",
@@ -17,6 +17,7 @@ const APP_SHELL = [
   "css/polaris.css",
   "js/framework.js",
   "js/experiences.js",
+  "js/platform.js",
   "js/store.js",
   "js/engine.js",
   "js/coach.js",

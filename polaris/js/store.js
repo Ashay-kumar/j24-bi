@@ -30,6 +30,12 @@
     return {
       onboarded: false,
       isDemo: false,
+      // Polaris Identity — the logged-in person (Book XVII Part III).
+      identity: {
+        name: "You",
+        roles: ["parent"],          // a person can hold multiple roles
+        activeWorkspace: "parent",  // one login, many workspaces
+      },
       profile: {
         name: "",
         age: null,
@@ -45,6 +51,10 @@
       evidence: [],
       experiences: [],
       cgms: [],
+      // Organizations are trusted contributors, never owners (Book XVII Part IV).
+      organizations: [],
+      // Development Memberships: child ↔ organization (Book XVII Part VI).
+      memberships: [],
       settings: { celebrateGrowth: true },
     };
   }
@@ -206,5 +216,49 @@
   // Hook for the engine to detect Child Growth Moments after new evidence.
   P.afterEvidenceChange = function (kind, payload) {
     if (P.engineDetectCGM) P.engineDetectCGM(kind, payload);
+  };
+
+  // ---- Platform: identity / workspaces / organizations / memberships ----
+
+  P.setWorkspace = function (id) {
+    if (!P.state.identity) P.state.identity = { name: "You", roles: ["parent"], activeWorkspace: "parent" };
+    P.state.identity.activeWorkspace = id;
+    P.save();
+  };
+
+  P.addOrganization = function (org) {
+    org.id = org.id || uid("org");
+    org.createdAt = org.createdAt || Date.now();
+    org.educators = org.educators || [];
+    P.state.organizations.unshift(org);
+    P.save();
+    return org;
+  };
+
+  P.addEducator = function (orgId, educator) {
+    var org = P.state.organizations.find(function (o) { return o.id === orgId; });
+    if (!org) return null;
+    educator.id = educator.id || uid("edu");
+    org.educators = org.educators || [];
+    org.educators.unshift(educator);
+    P.save();
+    return educator;
+  };
+
+  P.addMembership = function (m) {
+    m.id = m.id || uid("mem");
+    m.status = m.status || "active";
+    m.startYear = m.startYear || new Date().getFullYear();
+    P.state.memberships.unshift(m);
+    P.save();
+    return m;
+  };
+
+  P.endMembership = function (id) {
+    var m = P.state.memberships.find(function (x) { return x.id === id; });
+    if (!m) return;
+    m.status = "ended";
+    m.endYear = m.endYear || new Date().getFullYear();
+    P.save();
   };
 })(window.Polaris = window.Polaris || {});
