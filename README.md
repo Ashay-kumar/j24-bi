@@ -19,10 +19,7 @@ Tap **"Explore with sample child"** on the welcome screen to see the whole
 platform — the Development Constellation, explainable recommendations, the
 Growth Loop and AI Coach — populated with a rich demo profile.
 
+The repo root `index.html` simply redirects to the Polaris app.
+
 See [`polaris/README.md`](polaris/README.md) for full documentation and how it
 maps to the Polaris source books.
-
----
-
-> _Earlier experiments (the `*_dashboard.html` files and `index.html` at the
-> repo root) are unrelated legacy prototypes and are kept for reference only._
