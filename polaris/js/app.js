@@ -226,8 +226,10 @@
         "Polaris turns everyday moments into a clearer understanding of your child.") +
       heroHtml +
       activeHtml +
-      '<div class="grid g4 mt24">' +
-        statCard("fa-eye", w.observations, "Observations this week", "--polaris-blue") +
+      '<div class="section-title mt24"><i class="fa-solid fa-calendar-week"></i> This week ' +
+        '<span class="muted tiny" style="font-weight:600;margin-left:6px">last 7 days · see all-time totals in your Growth Story</span></div>' +
+      '<div class="grid g4">' +
+        statCard("fa-eye", w.observations, "Observations", "--polaris-blue") +
         statCard("fa-flag-checkered", w.experiences, "Adventures completed", "--forest") +
         statCard("fa-comment", w.reflections, "Reflections", "--purple") +
         statCard("fa-star", w.cgms, "Growth Moments", "--gold") +
@@ -527,7 +529,8 @@
         return '<div class="spread" style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="row"><span class="comp-ic" style="width:30px;height:30px;margin:0;background:' + tint(c, .12) + ";color:" + c + '"><i class="fa-solid ' + o.competency.icon + '"></i></span><span style="font-weight:700;font-size:13.5px">' + esc(o.competency.name) + "</span></div>" +
           '<button class="btn btn-soft btn-sm" data-act="open-comp" data-v="' + o.competency.id + '">Explore</button></div>';
       }).join("") + "</div></div>" +
-      '<div class="card card-pad mt24 center"><div class="row" style="justify-content:center;gap:30px">' +
+      '<div class="card card-pad mt24"><div class="section-title center" style="justify-content:center"><i class="fa-solid fa-infinity"></i> All time, since the journey began</div>' +
+      '<div class="row" style="justify-content:center;gap:30px">' +
       reportStat(rep.evidenceCount, "Evidence pieces") + reportStat(rep.completed, "Adventures") + reportStat(rep.cgms, "Growth Moments") +
       "</div></div>"
     );
