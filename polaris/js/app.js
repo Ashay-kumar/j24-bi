@@ -16,6 +16,8 @@
   var modal = null;          // { type, id }
   var coachThread = [];
   var onb = { step: 0, draft: null };
+  var deferredInstall = null; // captured beforeinstallprompt event
+  var isInstalled = false;
 
   // -------------------- small helpers --------------------
   function esc(s) {
@@ -171,6 +173,7 @@
       '<div class="brand"><div class="brand-star"><i class="fa-solid fa-star"></i></div><div><div class="brand-name">Polaris</div><div class="brand-sub">Development Companion</div></div></div>' +
       '<div class="nav-section">Explore</div>' + navHtml +
       '<div class="sidebar-foot">' +
+      (!isInstalled ? '<button class="nav-item" data-act="install" style="color:var(--polaris-blue)"><i class="fa-solid fa-circle-down"></i><span>Install app</span></button>' : "") +
       '<button class="nav-item ' + (route === "profile" ? "active" : "") + '" data-act="go" data-v="profile"><i class="fa-solid fa-gear"></i><span>Profile & Settings</span></button>' +
       '<div class="child-chip"><div class="av">' + esc(p.avatar) + '</div><div><div class="nm">' + esc(p.name) + '</div><div class="ag">Age ' + esc(p.age) + " · since " + fmtDate(p.createdAt) + "</div></div></div>" +
       "</div></aside>" +
@@ -570,6 +573,11 @@
       '<div class="mt16"><div class="fld">Interests</div><div class="wrap-tags">' + (interests || '<span class="muted tiny">None yet</span>') + "</div></div>" +
       '<div class="mt16"><div class="fld">Learning style</div><div class="wrap-tags">' + (personality || '<span class="muted tiny">None yet</span>') + "</div></div>" +
       '<div class="mt16"><div class="fld">Your goals</div><div class="wrap-tags">' + (goals || '<span class="muted tiny">None yet</span>') + "</div></div></div>" +
+      (isInstalled
+        ? '<div class="card card-pad mt24"><div class="row"><span class="comp-ic" style="width:38px;height:38px;margin:0;background:var(--forest-soft);color:var(--forest)"><i class="fa-solid fa-circle-check"></i></span><div><div style="font-weight:800">Installed as an app</div><div class="tiny muted">You\'re running Polaris in app mode. It works offline too.</div></div></div></div>'
+        : '<div class="card card-pad mt24"><div class="section-title"><i class="fa-solid fa-mobile-screen"></i> Install as an app</div>' +
+          '<p class="muted tiny mb16">Add Polaris to your home screen for a full-screen, offline-ready experience with its own icon \u2014 no app store needed.</p>' +
+          '<button class="btn btn-primary" data-act="install"><i class="fa-solid fa-download"></i> Install Polaris</button></div>') +
       '<div class="card card-pad mt24"><div class="section-title"><i class="fa-solid fa-database"></i> Your data</div>' +
       '<p class="muted tiny mb16">Polaris keeps everything privately in your browser. Nothing leaves this device.</p>' +
       '<div class="row" style="flex-wrap:wrap"><button class="btn btn-ghost" data-act="export"><i class="fa-solid fa-download"></i> Export data (JSON)</button>' +
@@ -587,6 +595,7 @@
     else if (modal.type === "obs") inner = obsModal();
     else if (modal.type === "evidence") inner = evidenceModal();
     else if (modal.type === "rec") inner = recModal(modal.id);
+    else if (modal.type === "install") inner = installModal();
     return '<div class="scrim" data-act="scrim"><div class="modal" data-stop="1">' + inner + "</div></div>";
   }
   function modalHead(title, sub) {
@@ -688,6 +697,27 @@
     );
   }
 
+  function installModal() {
+    var ios = isiOS();
+    var steps = ios
+      ? ['Tap the <b>Share</b> button <i class="fa-solid fa-arrow-up-from-bracket"></i> in Safari\u2019s toolbar.',
+         'Scroll down and tap <b>Add to Home Screen</b> <i class="fa-solid fa-square-plus"></i>.',
+         "Tap <b>Add</b> \u2014 Polaris will appear on your home screen like any app."]
+      : ['Open the browser menu <i class="fa-solid fa-ellipsis-vertical"></i> (top-right).',
+         'Choose <b>Install app</b> / <b>Add to Home screen</b>.',
+         "Confirm \u2014 Polaris opens full-screen, works offline, and gets its own icon."];
+    return (
+      modalHead("Install Polaris", "Use it like a real app") +
+      '<div class="modal-body">' +
+      '<p class="muted mb16">Polaris can be installed on your ' + (ios ? "iPhone or iPad" : "phone or computer") +
+      " \u2014 full-screen, offline-ready, with its own icon. No app store needed.</p>" +
+      '<ol style="padding-left:18px;font-size:14.5px;line-height:1.9">' +
+      steps.map(function (s) { return "<li>" + s + "</li>"; }).join("") + "</ol>" +
+      (ios ? "" : '<button class="btn btn-primary btn-block mt16" data-act="install"><i class="fa-solid fa-download"></i> Try install now</button>') +
+      "</div>"
+    );
+  }
+
   // ==================== SHARED UI BITS ====================
   function pageHead(title, sub, desc) {
     return '<div class="page-head"><div class="page-eyebrow">Polaris</div><div class="page-title">' + esc(title) + "</div>" +
@@ -775,6 +805,9 @@
       // coach
       case "coach-ask": coachAsk(v); break;
       case "coach-send": coachAsk(val("coach-q")); break;
+
+      // install
+      case "install": doInstall(); break;
 
       // settings
       case "export": exportData(); break;
@@ -885,6 +918,18 @@
     render();
   }
 
+  function doInstall() {
+    if (deferredInstall) {
+      deferredInstall.prompt();
+      var p = deferredInstall.userChoice;
+      if (p && p.then) p.then(function () { deferredInstall = null; render(); });
+      else { deferredInstall = null; render(); }
+    } else {
+      // iOS Safari (and browsers without the prompt) need manual instructions.
+      openModal("install");
+    }
+  }
+
   function exportData() {
     var blob = new Blob([JSON.stringify(P.state, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
@@ -911,9 +956,37 @@
   }
 
   // ==================== INIT ====================
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  }
+  function isiOS() {
+    return /iphone|ipad|ipod/i.test(window.navigator.userAgent) && !window.MSStream;
+  }
+
   function init() {
     root = document.getElementById("root");
     P.load();
+    isInstalled = isStandalone();
+
+    // PWA install: capture the prompt so we can offer an in-app Install button.
+    window.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault();
+      deferredInstall = e;
+      render();
+    });
+    window.addEventListener("appinstalled", function () {
+      deferredInstall = null; isInstalled = true; render();
+      toast("Polaris is installed 🎉");
+    });
+
+    // Deep links from manifest shortcuts (?route=… / ?action=observe).
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var r = params.get("route");
+      if (r) route = r;
+      if (params.get("action") === "observe" && P.state.onboarded) modal = { type: "obs", id: null };
+    } catch (e) {}
+
     document.addEventListener("click", onClick);
     document.addEventListener("keydown", onKey);
     render();

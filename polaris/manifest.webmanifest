@@ -1,0 +1,25 @@
+{
+  "name": "Polaris — Child Development Companion",
+  "short_name": "Polaris",
+  "description": "Understand, develop and celebrate your child's potential through evidence-based experiences.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#fbfaf7",
+  "theme_color": "#3a6ff0",
+  "lang": "en",
+  "categories": ["education", "lifestyle", "parenting"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Record an observation", "short_name": "Observe", "url": "./?action=observe" },
+    { "name": "Next Adventures", "short_name": "Adventures", "url": "./?route=recommend" },
+    { "name": "AI Coach", "short_name": "Coach", "url": "./?route=coach" }
+  ]
+}
