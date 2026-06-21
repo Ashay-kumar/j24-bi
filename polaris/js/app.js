@@ -203,10 +203,26 @@
         "<p>Record an observation or complete an adventure to begin " + esc(p.name) + "'s journey.</p>" +
         '<div class="row mt16"><button class="btn btn-primary" data-act="open-obs">Record an observation</button></div></div>';
 
+    // In-progress adventures appear right here so a started activity is visible.
+    var active = P.state.experiences.filter(function (x) { return x.status === "active"; });
+    var activeHtml = active.length
+      ? '<div class="card card-pad mt24"><div class="section-title"><i class="fa-solid fa-play"></i> Continue your adventure</div>' +
+        active.map(function (x) {
+          var e = P.experienceById[x.experienceId];
+          if (!e) return "";
+          var c = pillarColor(P.competencyById[e.targets[0]].pillar);
+          return '<div class="spread" style="padding:11px 0;border-bottom:1px solid var(--line)">' +
+            '<div class="row"><span class="comp-ic" style="width:34px;height:34px;margin:0;background:' + tint(c, .12) + ";color:" + c + '"><i class="fa-solid ' + e.icon + '"></i></span>' +
+            '<div><div style="font-weight:800;font-size:14.5px">' + esc(e.title) + '</div><div class="tiny muted">Started ' + fmtDate(x.startedAt) + " · strengthens " + esc(P.competencyById[e.targets[0]].name) + "</div></div></div>" +
+            '<button class="btn btn-green btn-sm" data-act="open-complete" data-v="' + x.id + '"><i class="fa-solid fa-check"></i> Complete &amp; reflect</button></div>';
+        }).join("") + "</div>"
+      : "";
+
     return (
       pageHead("Growth Journey", greet + ", let's see how " + esc(p.name) + " is growing 🌱",
         "Polaris turns everyday moments into a clearer understanding of your child.") +
       heroHtml +
+      activeHtml +
       '<div class="grid g4 mt24">' +
         statCard("fa-eye", w.observations, "Observations this week", "--polaris-blue") +
         statCard("fa-flag-checkered", w.experiences, "Adventures completed", "--forest") +
@@ -837,7 +853,7 @@
     var note = val("cmp-note").trim();
     var done = function (dataUrl) {
       P.completeExperience(instId, { reflection: reflection, evidenceNote: note, evidenceType: "photo", dataUrl: dataUrl || null });
-      closeModal(); route = "timeline"; render();
+      closeModal(); route = "home"; render();
       toast("Adventure complete — that's a Child Growth Moment! ⭐");
     };
     readFile(fileEl, done);
@@ -856,8 +872,8 @@
 
   function startExp(id) {
     P.startExperience(id, "manual");
-    closeModal(); route = "adventures"; render();
-    toast("Adventure started — enjoy it together!");
+    closeModal(); route = "home"; render();
+    toast("Adventure started — find it under “Continue your adventure”.");
   }
 
   function coachAsk(q) {
