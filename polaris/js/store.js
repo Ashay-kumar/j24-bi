@@ -29,6 +29,7 @@
   function emptyState() {
     return {
       onboarded: false,
+      isDemo: false,
       profile: {
         name: "",
         age: null,

@@ -14,6 +14,7 @@
   P.loadDemo = function () {
     var s = P.emptyState();
     s.onboarded = true;
+    s.isDemo = true; // flags this as the sample child so the UI can say so
     s.profile = {
       name: "Aanya",
       age: 9,

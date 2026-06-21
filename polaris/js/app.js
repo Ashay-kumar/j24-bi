@@ -177,8 +177,18 @@
       '<button class="nav-item ' + (route === "profile" ? "active" : "") + '" data-act="go" data-v="profile"><i class="fa-solid fa-gear"></i><span>Profile & Settings</span></button>' +
       '<div class="child-chip"><div class="av">' + esc(p.avatar) + '</div><div><div class="nm">' + esc(p.name) + '</div><div class="ag">Age ' + esc(p.age) + " · since " + fmtDate(p.createdAt) + "</div></div></div>" +
       "</div></aside>" +
-      '<main class="main">' + view + "</main></div>" +
+      '<main class="main">' + (P.state.isDemo ? demoBanner() : "") + view + "</main></div>" +
       (modal ? modalView() : "")
+    );
+  }
+
+  function demoBanner() {
+    return (
+      '<div class="card card-pad mb16" style="background:var(--gold-soft);border-color:#f0d39a;display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap">' +
+      '<div class="row"><span class="comp-ic" style="width:38px;height:38px;margin:0;background:#fff;color:#b3771a"><i class="fa-solid fa-flask"></i></span>' +
+      '<div><div style="font-weight:800">You\u2019re exploring sample data</div>' +
+      '<div class="tiny muted">This is a demo child (Aanya) so you can see Polaris in action \u2014 it isn\u2019t your data.</div></div></div>' +
+      '<button class="btn btn-primary btn-sm" data-act="start-own"><i class="fa-solid fa-user-plus"></i> Start my child\u2019s journey</button></div>'
     );
   }
 
@@ -808,6 +818,9 @@
       // coach
       case "coach-ask": coachAsk(v); break;
       case "coach-send": coachAsk(val("coach-q")); break;
+
+      // leave the sample and onboard a real child
+      case "start-own": P.reset(); onb = { step: 0, draft: null }; route = "home"; render(); break;
 
       // install
       case "install": doInstall(); break;
